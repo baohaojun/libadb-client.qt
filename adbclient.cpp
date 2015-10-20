@@ -202,7 +202,6 @@ bool AdbClient::sync_recv(const QString& rpath, const QString& lpath)
     QFile lfile(lpath);
     char *buffer = send_buffer.data;
     unsigned id;
-    unsigned long long size = 0;
 
     len = rpath.toUtf8().size();
     if(len > 1024) return false;
@@ -463,6 +462,7 @@ bool AdbClient::do_sync_push(const char *lpath, const char *rpath)
         return false;
     } else {
         if(!sync_readmode(rpath, &mode)) {
+            qDebug() << "can't read rpath mode";
             return false;
         }
         QString finalRemotePath = rpath;
@@ -474,7 +474,8 @@ bool AdbClient::do_sync_push(const char *lpath, const char *rpath)
             finalRemotePath += "/" + name;
         }
 
-        if(sync_send(lpath, finalRemotePath, lInfo.lastModified().toTime_t(), 0x81b6)) {
+        if(!sync_send(lpath, finalRemotePath, lInfo.lastModified().toTime_t(), 0x81b6)) {
+            qDebug() << "send failed";
             return false;
         } else {
             sync_quit();
