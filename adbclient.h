@@ -97,6 +97,9 @@ struct syncsendbuf {
     char data[SYNC_DATA_MAX];
 };
 
+bool _writex(QIODevice& io, const void* data, qint64 max);
+QString adb_quote_shell(const QStringList& args);
+
 class AdbClient
 {
 private:
@@ -125,15 +128,19 @@ private:
 
 
 public:
+    QTcpSocket* getSock() { return &adbSock; };
     AdbClient();
     ~AdbClient();
 
-    QString doAdbShell(const QStringList& cmdAndArgs);
-    QString doAdbShell(const QString& cmdLine);
+    static QString doAdbShell(const QStringList& cmdAndArgs);
+    static QString doAdbShell(const QString& cmdLine);
+    static AdbClient* doAdbPipe(const QStringList& cmdAndArgs);
+    static AdbClient* doAdbPipe(const QString& cmdLine);
 
-    bool doAdbPull(const QString& rptah, const QString& lpath);
-    bool doAdbPush(const QString& lpath, const QString& rpath);
-    int doAdbKill();
+    static bool doAdbPull(const QString& rptah, const QString& lpath);
+    static bool doAdbPush(const QString& lpath, const QString& rpath);
+    static int doAdbKill();
+    static int doAdbForward(const QString& forwardSpec);
 };
 
 #endif // ADBCLIENT_H

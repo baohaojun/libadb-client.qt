@@ -36,7 +36,7 @@ bool AdbClient::readx(void* data, qint64 max)
     return true;
 }
 
-static bool _writex(QIODevice& io, const void* data, qint64 max)
+bool _writex(QIODevice& io, const void* data, qint64 max)
 {
     int done = 0;
     while (max > done) {
@@ -147,31 +147,52 @@ bool AdbClient::adb_connect(const char *service)
     return adb_status();
 }
 
-QString AdbClient::doAdbShell(const QStringList& cmdAndArgs)
+AdbClient* AdbClient::doAdbPipe(const QString& cmdLine)
 {
+    return AdbClient::doAdbPipe(QStringList(cmdLine));
+}
+
+AdbClient* AdbClient::doAdbPipe(const QStringList& cmdAndArgs)
+{
+    AdbClient *adb = new AdbClient();
     QString cmdLine = "shell:";
     foreach(const QString& a, cmdAndArgs) {
         cmdLine += a + " ";
     }
 
-    bool res = adb_connect(cmdLine.toUtf8().constData());
+    bool res = adb->adb_connect(cmdLine.toUtf8().constData());
     if (!res) {
-        isOK = false;
-        return "";
+        adb->isOK = false;
+        delete adb;
+        return NULL;
     }
+    return adb;
+}
+
+QString AdbClient::doAdbShell(const QStringList& cmdAndArgs)
+{
+    AdbClient *adb = doAdbPipe(cmdAndArgs);
+    if (!adb)
+        return NULL;
 
     QByteArray buf;
 
-    if (res) {
-        while (adbSock.waitForReadyRead()) {
-            buf += adbSock.readAll();
-        }
+    while (adb->adbSock.waitForReadyRead()) {
+        buf += adb->adbSock.readAll();
     }
-    return QString::fromUtf8(buf);
+
+    delete adb;
+
+    QString ret = QString::fromUtf8(buf);
+    ret.replace("\r", "");
+    while (ret.endsWith("\n")) {
+        ret.chop(1);
+    }
+    return ret;
 }
 
 QString AdbClient::doAdbShell(const QString& cmdLine) {
-    return cmdLine;
+    return AdbClient::doAdbShell(QStringList(cmdLine));
 }
 
 bool AdbClient::sync_recv(const QString& rpath, const QString& lpath)
@@ -466,20 +487,35 @@ bool AdbClient::do_sync_push(const char *lpath, const char *rpath)
 
 bool AdbClient::doAdbPush(const QString& lpath, const QString& rpath)
 {
-    return do_sync_push(lpath.toUtf8().constData(), rpath.toUtf8().constData());
+    AdbClient *adb = new AdbClient();
+    bool res = adb->do_sync_push(lpath.toUtf8().constData(), rpath.toUtf8().constData());
+    delete adb;
+    return res;
 }
 
 bool AdbClient::doAdbPull(const QString& rpath, const QString& lpath)
 {
-    return do_sync_pull(rpath.toUtf8().constData(), lpath.toUtf8().constData());
+    AdbClient *adb = new AdbClient();
+    bool res = adb->do_sync_pull(rpath.toUtf8().constData(), lpath.toUtf8().constData());
+    delete adb;
+    return res;
 }
 
 int AdbClient::doAdbKill()
 {
-    adbSock.write("0009host:kill");
-    adbSock.flush();
-    adbSock.close();
+    AdbClient *adb = new AdbClient();
+    adb->adbSock.write("0009host:kill");
+    adb->adbSock.flush();
+    adb->adbSock.close();
+    delete adb;
+    return 0;
+}
 
-    printf("hello world\n");
+// "host:forward:tcp:28888;localabstract:T1Wrench"
+int AdbClient::doAdbForward(const QString& forwardSpec)
+{
+    AdbClient *adb = new AdbClient();
+    adb->adb_connect(forwardSpec.toUtf8().constData());
+    delete adb;
     return 0;
 }
