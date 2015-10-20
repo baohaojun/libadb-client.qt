@@ -3,6 +3,7 @@
 #include <QTcpSocket>
 #include <QFileInfo>
 #include <QDateTime>
+#include <QDir>
 
 AdbClient::AdbClient()
 {
@@ -35,20 +36,23 @@ bool AdbClient::readx(void* data, qint64 max)
     return true;
 }
 
-bool AdbClient::writex(const void* data, qint64 max)
+static bool _writex(QIODevice& io, const void* data, qint64 max)
 {
     int done = 0;
     while (max > done) {
-        int n = adbSock.write((char*)data + done, max - done);
+        int n = io.write((char*)data + done, max - done);
         if (n <= 0) {
-            return false;
-        }
-        if (!adbSock.waitForBytesWritten()) {
             return false;
         }
         done += n;
     }
     return true;
+
+}
+
+bool AdbClient::writex(const void* data, qint64 max)
+{
+    return _writex(adbSock, data, max);
 }
 
 void AdbClient::adb_close()
@@ -168,6 +172,135 @@ QString AdbClient::doAdbShell(const QStringList& cmdAndArgs)
 
 QString AdbClient::doAdbShell(const QString& cmdLine) {
     return cmdLine;
+}
+
+bool AdbClient::sync_recv(const QString& rpath, const QString& lpath)
+{
+    syncmsg msg;
+    int len;
+    QFile lfile(lpath);
+    char *buffer = send_buffer.data;
+    unsigned id;
+    unsigned long long size = 0;
+
+    len = rpath.toUtf8().size();
+    if(len > 1024) return false;
+
+
+    msg.req.id = ID_RECV;
+    msg.req.namelen = htoll(len);
+    if(!writex(&msg.req, sizeof(msg.req)) ||
+       !writex(rpath.toUtf8(), len)) {
+        return false;
+    }
+
+    if(!readx(&msg.data, sizeof(msg.data))) {
+        return false;
+    }
+    id = msg.data.id;
+
+    if((id == ID_DATA) || (id == ID_DONE)) {
+        lfile.remove();
+        QDir dir = QFileInfo(lpath).dir();
+        dir.mkpath(dir.path());
+
+        if (!lfile.open(QIODevice::WriteOnly)) {
+            qDebug() << "Can't open" << lpath;
+            return false;
+        }
+        goto handle_data;
+    } else {
+        goto remote_error;
+    }
+
+    for(;;) {
+        if(!readx(&msg.data, sizeof(msg.data))) {
+            return false;
+        }
+        id = msg.data.id;
+
+    handle_data:
+        len = ltohl(msg.data.size);
+        if(id == ID_DONE) break;
+        if(id != ID_DATA) goto remote_error;
+        if(len > SYNC_DATA_MAX) {
+            qDebug() << "data overrun\n";
+            lfile.close();
+            return false;
+        }
+
+        if(!readx(buffer, len)) {
+            lfile.close();
+            return false;
+        }
+
+        if(!_writex(lfile, buffer, len)) {
+            qDebug() << "cannot write" << lpath;
+            lfile.close();
+            return false;
+        }
+    }
+
+    lfile.close();
+    return true;
+
+remote_error:
+    lfile.close();
+    lfile.remove();
+
+    if(id == ID_FAIL) {
+        len = ltohl(msg.data.size);
+        if(len > 256) len = 256;
+        if(!readx(buffer, len)) {
+            return false;
+        }
+        buffer[len] = 0;
+    } else {
+        memcpy(buffer, &id, 4);
+        buffer[4] = 0;
+//        strcpy(buffer,"unknown reason");
+    }
+    qDebug() <<  "failed to copy" << rpath << "to" << lpath << ":" << buffer;
+    return false;
+}
+
+bool AdbClient::do_sync_pull(const char *rpath, const char *lpath)
+{
+    unsigned mode;
+    if (!adb_connect("sync:")) {
+        qDebug() << "error: " << adb_error();
+        return false;
+    }
+
+    if (!sync_readmode(rpath, &mode)) {
+        return false;
+    }
+    if(mode == 0) {
+        qDebug() << "remote object" << rpath << "does not exist\n";
+        return false;
+    }
+
+    if(S_ISREG(mode) || S_ISLNK(mode) || S_ISCHR(mode) || S_ISBLK(mode)) {
+        QString finalLpath = lpath;
+        QFileInfo lInfo(lpath);
+
+        if (lInfo.isDir()) {
+            finalLpath += "/" + QFileInfo(rpath).fileName();
+        }
+
+        if (!sync_recv(rpath, finalLpath)) {
+            return false;
+        } else {
+            sync_quit();
+            return true;
+        }
+    } else if(S_ISDIR(mode)) {
+        qDebug() << "Error: do not support directroy: " << rpath;
+        return false;
+    } else {
+        qDebug() << rpath << " is not a file or directroy";
+        return false;
+    }
 }
 
 bool AdbClient::sync_readmode(const char *path, quint32 *mode)
@@ -331,17 +464,14 @@ bool AdbClient::do_sync_push(const char *lpath, const char *rpath)
     return true;
 }
 
-int AdbClient::doAdbPush(QStringList files, QString targetDir)
+bool AdbClient::doAdbPush(const QString& lpath, const QString& rpath)
 {
-    foreach(const QString& src, files) {
-        do_sync_push(src.toUtf8().constData(), targetDir.toUtf8().constData());
-    }
-    return 0;
+    return do_sync_push(lpath.toUtf8().constData(), rpath.toUtf8().constData());
 }
 
-int AdbClient::doAdbPull(QStringList files, QString targetDir)
+bool AdbClient::doAdbPull(const QString& rpath, const QString& lpath)
 {
-    return 0;
+    return do_sync_pull(rpath.toUtf8().constData(), lpath.toUtf8().constData());
 }
 
 int AdbClient::doAdbKill()

@@ -6,7 +6,7 @@ if test "$1" = debug; then
 fi
 
 mkdir -p $tmpdir
-rsync -av $PWD/* $tmpdir --exclude=.git
+rsync -av $PWD/* $tmpdir --exclude=.git --exclude=adb-client --exclude=adb-client.d
 
 (
     cd $tmpdir

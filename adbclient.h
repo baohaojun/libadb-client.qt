@@ -109,6 +109,9 @@ private:
     bool writex(const void *data, qint64 max);
     bool readx(void *data, qint64 max);
     void sync_quit();
+    QString adb_error() { return __adb_error; };
+    bool sync_recv(const QString& rpath, const QString& lpath);
+    bool do_sync_pull(const char *rpath, const char *lpath);
     void adb_close();
     bool adb_status();
     bool do_sync_push(const char *lpath, const char *rpath);
@@ -128,8 +131,8 @@ public:
     QString doAdbShell(const QStringList& cmdAndArgs);
     QString doAdbShell(const QString& cmdLine);
 
-    int doAdbPush(QStringList files, QString targetDir);
-    int doAdbPull(QStringList files, QString targetDir);
+    bool doAdbPull(const QString& rptah, const QString& lpath);
+    bool doAdbPush(const QString& lpath, const QString& rpath);
     int doAdbKill();
 };
 

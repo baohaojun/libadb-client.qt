@@ -12,7 +12,10 @@ int main(int argc, char *argv[])
     if (argc <= 1) {
         adbArgs << "sh" << "-c" << "'echo shit'";
     } else if (QString(argv[1]) == "push" && argc == 4) {
-        adb.doAdbPush(QStringList(argv[2]), QString(argv[3]));
+        adb.doAdbPush(argv[2], argv[3]);
+        return 0;
+    } else if (QString(argv[1]) == "pull" && argc == 4) {
+        adb.doAdbPull(argv[2], argv[3]);
         return 0;
     } else {
         for (int i = 1; i < argc; i++) {
