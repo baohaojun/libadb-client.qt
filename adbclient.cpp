@@ -426,7 +426,7 @@ bool AdbClient::sync_send(const QString& lpath, const QString& rpath,
         } else
             strcpy(sbuf->data, "unknown reason");
 
-        fprintf(stderr,"failed to copy '%s' to '%s': %s\n", lpath, rpath, sbuf->data);
+        fprintf(stderr,"failed to copy '%s' to '%s': %s\n", lpath.toUtf8().constData(), rpath.toUtf8().constData(), sbuf->data);
         return false;
     }
 
