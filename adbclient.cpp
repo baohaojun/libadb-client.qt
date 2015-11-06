@@ -8,7 +8,7 @@
 AdbClient::AdbClient()
 {
     isOK = true;
-    adbSock.connectToHost("localhost", 5037, QIODevice::ReadWrite);
+    adbSock.connectToHost("127.0.0.1", 5037, QIODevice::ReadWrite);
     adbSock.waitForConnected();
 }
 
